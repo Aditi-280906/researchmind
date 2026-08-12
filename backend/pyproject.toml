@@ -8,5 +8,6 @@ dependencies = [
     "fastapi>=0.140.0",
     "pydantic>=2.13.4",
     "pymupdf>=1.28.0",
+    "tiktoken>=0.13.0",
     "uvicorn>=0.51.0",
 ]
