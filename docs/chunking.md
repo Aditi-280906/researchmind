@@ -113,17 +113,21 @@ be evaluated later against this baseline** — we're not pretending Version 1 is
 our research contribution; it's the yardstick everything else gets measured
 against.
 
-## Future improvements
+## Observed Failure Case
 
-- Add a fallback rule: if a single "paragraph" exceeds some hard ceiling
-  (e.g. 2x the target token size), split it further by sentence or line,
-  even without a blank-line paragraph break — references sections and
-  similar dense blocks need this.
-- Consider detecting and handling the References section separately, since
-  it's structurally different from the main body text (citation entries,
-  not prose) and likely shouldn't be embedded/retrieved the same way as
-  body paragraphs anyway.
-- Preserve real `page_number` and `section` metadata (currently empty/None)
-- Try recursive chunking as a stronger baseline
-- Move toward structure-aware chunking for the actual research contribution
-- Re-run experiments once real metadata extraction exists
+Paragraph-based chunking failed on the References section of
+Attention Is All You Need because the extracted PDF text contained
+the references as one extremely large paragraph.
+
+## Baseline Mitigation
+
+An oversized-unit fallback splitter was introduced to guarantee
+that no chunk exceeds the configured token limit.
+
+## Remaining Limitation
+
+The system still does not understand scientific document structure.
+References, equations, tables, captions, and section boundaries are
+not yet treated differently.
+
+This motivates future structure-aware/adaptive chunking.

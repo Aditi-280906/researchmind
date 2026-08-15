@@ -1,1 +1,2 @@
 backend/data/papers/*.pdf
+backend/data/embeddings/*.json
