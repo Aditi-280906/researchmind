@@ -1,12 +1,9 @@
 import tiktoken
 from app.models.chunk import Chunk
 from app.ingestion.chunking.base import BaseChunker
+from app.ingestion.chunking.fallback import split_oversized_text, count_tokens
 
 _encoder = tiktoken.get_encoding("cl100k_base")
-
-
-def count_tokens(text: str) -> int:
-    return len(_encoder.encode(text))
 
 
 class ParagraphChunker(BaseChunker):
@@ -20,31 +17,45 @@ class ParagraphChunker(BaseChunker):
 
         paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
 
+        safe_units: list[str] = []
+        for paragraph in paragraphs:
+            if count_tokens(paragraph) > self.target_tokens:
+                safe_units.extend(
+                    split_oversized_text(paragraph, self.target_tokens, self.overlap_tokens)
+                )
+            else:
+                safe_units.append(paragraph)
+
         chunks: list[Chunk] = []
-        current_paragraphs: list[str] = []
+        current_units: list[str] = []
         current_tokens = 0
         chunk_index = 0
 
-        for paragraph in paragraphs:
-            paragraph_tokens = count_tokens(paragraph)
+        for unit in safe_units:
+            unit_tokens = count_tokens(unit)
 
-            # If adding this paragraph would overflow the target, close the current chunk first
-            if current_paragraphs and current_tokens + paragraph_tokens > self.target_tokens:
-                chunk_text = "\n\n".join(current_paragraphs)
+            if current_units and current_tokens + unit_tokens > self.target_tokens:
+                chunk_text = "\n\n".join(current_units)
                 chunks.append(self._make_chunk(chunk_text, document_id, chunk_index))
                 chunk_index += 1
 
-                # Start next chunk with overlap: carry the tail of the previous chunk forward
                 overlap_text = self._get_overlap(chunk_text)
-                current_paragraphs = [overlap_text] if overlap_text else []
-                current_tokens = count_tokens(overlap_text) if overlap_text else 0
+                overlap_tokens_count = count_tokens(overlap_text) if overlap_text else 0
 
-            current_paragraphs.append(paragraph)
-            current_tokens += paragraph_tokens
+                # Only carry the overlap forward if it still leaves room for this unit.
+                # Otherwise, start the next chunk fresh with just this unit.
+                if overlap_text and overlap_tokens_count + unit_tokens <= self.target_tokens:
+                    current_units = [overlap_text]
+                    current_tokens = overlap_tokens_count
+                else:
+                    current_units = []
+                    current_tokens = 0
 
-        # Don't forget the final chunk
-        if current_paragraphs:
-            chunk_text = "\n\n".join(current_paragraphs)
+            current_units.append(unit)
+            current_tokens += unit_tokens
+
+        if current_units:
+            chunk_text = "\n\n".join(current_units)
             chunks.append(self._make_chunk(chunk_text, document_id, chunk_index))
 
         return chunks
